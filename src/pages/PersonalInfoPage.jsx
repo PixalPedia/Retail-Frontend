@@ -7,7 +7,8 @@ import Notification from '../components/shared/Notification';
 import RequestEmailVerification from '../components/auth/RequestEmailVerification';
 import RequestPasswordReset from '../components/auth/RequestPasswordReset';
 import ResetPassword from '../components/auth/ResetPassword';
-import VerifyMail from '../components/auth/VerifyMail'; // Updated component for email verification
+import VerifyMail from '../components/auth/VerifyMail';
+// Updated component for email verification
 import '../components/styles/PersonalInfoPage.css';
 import { wrapperFetch } from '../utils/wrapperfetch';
 
@@ -20,14 +21,14 @@ const PersonalInfoPage = () => {
   const [error, setError] = useState(null); // Error state
   const [notification, setNotification] = useState({ message: '', type: '' }); // Notification state
   const [isEditing, setIsEditing] = useState(false); // Toggle editing mode
-  const [formData, setFormData] = useState({});  // Form data for user inputs
+  const [formData, setFormData] = useState({}); // Form data for user inputs
   const [currentForm, setCurrentForm] = useState('info'); // Manage current form state
   const [email, setEmail] = useState(''); // Email state for forms
   const [otp, setOtp] = useState(''); // OTP state for verification and reset
   const [isCartOpen, setIsCartOpen] = useState(false); // Cart Slider visibility
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Menu visibility state
 
-  const userId = localStorage.getItem('userId'); // Retrieve user ID from localStorage
+  const userId = localStorage.getItem('userId'); // Retrieve userID from localStorage
 
   // Function to display notifications
   const showNotification = (message, type) => {
@@ -42,16 +43,17 @@ const PersonalInfoPage = () => {
       setIsLoading(false);
       return;
     }
-
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const deliveryData = await FetchUserInfo(userId); // Fetch delivery info
+        // Fetch delivery info using the imported fetchUserInfo function
+        const deliveryData = await fetchUserInfo(userId);
         setUserInfo(deliveryData);
         setFormData(deliveryData);
-        const detailedData = await FetchDetailedUserInfo(userId); // Fetch detailed user info
+        // Fetch detailed user info (using our locally defined function)
+        const detailedData = await fetchDetailedUserInfo(userId);
         setDetailedInfo(detailedData.user);
-        setEmail(detailedData.user.email || ''); // Set email for forms
+        setEmail(detailedData.user.email || '');
       } catch (err) {
         setError(err.message || 'Failed to fetch user information.');
         showNotification(err.message || 'Failed to fetch user information.', 'error');
@@ -59,7 +61,6 @@ const PersonalInfoPage = () => {
         setIsLoading(false);
       }
     };
-
     fetchData();
   }, [userId]);
 
@@ -93,7 +94,7 @@ const PersonalInfoPage = () => {
     e.preventDefault();
     try {
       const response = await updateUserInfo(userId, formData); // Update user info via API
-      setUserInfo(formData);
+      setUserInfo(formData); // Optionally update the state
       setIsEditing(false); // Exit editing mode
       showNotification(response.message || 'Address updated successfully!', 'success');
     } catch (err) {
@@ -119,7 +120,6 @@ const PersonalInfoPage = () => {
         />
       );
     }
-
     if (currentForm === 'request-password-reset') {
       return (
         <RequestPasswordReset
@@ -132,7 +132,6 @@ const PersonalInfoPage = () => {
         />
       );
     }
-
     if (currentForm === 'password-reset') {
       return (
         <ResetPassword
@@ -146,7 +145,6 @@ const PersonalInfoPage = () => {
         />
       );
     }
-
     if (currentForm === 'request-email-verification') {
       return (
         <RequestEmailVerification
@@ -168,27 +166,46 @@ const PersonalInfoPage = () => {
         />
       );
     }
-
     // Default: Personal Information Form
     return (
       <div className="personal-info-content">
         <h1 className="personal-info-title">Personal Information</h1>
         {detailedInfo && (
           <div className="info-display">
-            <p><strong>Username:</strong> {detailedInfo.username || 'N/A'}</p>
-            <p><strong>Email:</strong> {detailedInfo.email || 'N/A'}</p>
+            <p>
+              <strong>Username:</strong> {detailedInfo.username || 'N/A'}
+            </p>
+            <p>
+              <strong>Email:</strong> {detailedInfo.email || 'N/A'}
+            </p>
           </div>
         )}
         {!isEditing ? (
           <div className="info-display">
-            <p><strong>Phone Number:</strong> {userInfo?.phone_number || 'N/A'}</p>
-            <p><strong>Apartment/Home:</strong> {userInfo?.apartment_or_home || 'N/A'}</p>
-            <p><strong>Address Line1:</strong> {userInfo?.address_line_1 || 'N/A'}</p>
-            <p><strong>Address Line2:</strong> {userInfo?.address_line_2 || 'N/A'}</p>
-            <p><strong>City:</strong> {userInfo?.city || 'N/A'}</p>
-            <p><strong>State:</strong> {userInfo?.state || 'N/A'}</p>
-            <p><strong>Country:</strong> {userInfo?.country || 'N/A'}</p>
-            <p><strong>Postal Code:</strong> {userInfo?.postal_code || 'N/A'}</p>
+            <p>
+              <strong>Phone Number:</strong> {userInfo?.phone_number || 'N/A'}
+            </p>
+            <p>
+              <strong>Apartment/Home:</strong> {userInfo?.apartment_or_home || 'N/A'}
+            </p>
+            <p>
+              <strong>Address Line 1:</strong> {userInfo?.address_line_1 || 'N/A'}
+            </p>
+            <p>
+              <strong>Address Line 2:</strong> {userInfo?.address_line_2 || 'N/A'}
+            </p>
+            <p>
+              <strong>City:</strong> {userInfo?.city || 'N/A'}
+            </p>
+            <p>
+              <strong>State:</strong> {userInfo?.state || 'N/A'}
+            </p>
+            <p>
+              <strong>Country:</strong> {userInfo?.country || 'N/A'}
+            </p>
+            <p>
+              <strong>Postal Code:</strong> {userInfo?.postal_code || 'N/A'}
+            </p>
             <button className="edit-address-button" onClick={() => setIsEditing(true)}>
               Edit Address
             </button>
@@ -214,7 +231,7 @@ const PersonalInfoPage = () => {
               />
             </label>
             <label>
-              Address Line1:
+              Address Line 1:
               <input
                 type="text"
                 name="address_line_1"
@@ -223,7 +240,7 @@ const PersonalInfoPage = () => {
               />
             </label>
             <label>
-              Address Line2:
+              Address Line 2:
               <input
                 type="text"
                 name="address_line_2"
@@ -270,27 +287,17 @@ const PersonalInfoPage = () => {
             <button type="submit" className="edit-address-button">
               Save
             </button>
-            <button
-              type="button"
-              className="edit-address-button"
-              onClick={() => setIsEditing(false)}
-            >
+            <button type="button" className="edit-address-button" onClick={() => setIsEditing(false)}>
               Cancel
             </button>
           </form>
         )}
         {/* Buttons for Reset Password and Verify Email */}
         <div className="action-buttons">
-          <button
-            className="action-button-reset-password"
-            onClick={() => setCurrentForm('request-password-reset')}
-          >
+          <button className="action-button-reset-password" onClick={() => setCurrentForm('request-password-reset')}>
             Reset Password
           </button>
-          <button
-            className="action-button-Email-Own"
-            onClick={() => setCurrentForm('request-email-verification')}
-          >
+          <button className="action-button-Email-Own" onClick={() => setCurrentForm('request-email-verification')}>
             Verify Email
           </button>
         </div>
@@ -315,9 +322,7 @@ const PersonalInfoPage = () => {
       {/* Notification Component */}
       <Notification message={notification.message} type={notification.type} />
       {/* Main Content */}
-      <div className="personal-info-page">
-        {renderForm()}
-      </div>
+      <div className="personal-info-page">{renderForm()}</div>
     </div>
   );
 };
