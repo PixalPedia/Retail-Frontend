@@ -40,19 +40,19 @@ const PreviewLoadPage = () => {
       try {
         // If category_id is present, use DiscoverSection logic
         if (categoryId) {
-          await wrapperFetchDiscoverCategoryProducts(categoryId);
+          await fetchDiscoverCategoryProducts(categoryId);
           return; // Skip additional filters logic
         }
 
         const categoryProducts = filters.category_id
-          ? await wrapperFetchCategoryProducts(filters.category_id)
+          ? await fetchCategoryProducts(filters.category_id)
           : [];
-        const priceProducts = filters.price ? await wrapperFetchPriceProducts(filters.price) : [];
+        const priceProducts = filters.price ? await wfetchPriceProducts(filters.price) : [];
         const optionProducts = filters.option_ids
-          ? await wrapperFetchOptionProducts(filters.option_ids)
+          ? await fetchOptionProducts(filters.option_ids)
           : [];
         const searchProducts = params.get('search')
-          ? await wrapperFetchSearchProducts(params.get('search'))
+          ? await fetchSearchProducts(params.get('search'))
           : [];
 
         // Combine results if multiple filters are applied
