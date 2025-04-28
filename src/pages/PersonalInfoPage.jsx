@@ -46,10 +46,10 @@ const PersonalInfoPage = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const deliveryData = await wrapperFetchUserInfo(userId); // Fetch delivery info
+        const deliveryData = await FetchUserInfo(userId); // Fetch delivery info
         setUserInfo(deliveryData);
         setFormData(deliveryData);
-        const detailedData = await wrapperFetchDetailedUserInfo(userId); // Fetch detailed user info
+        const detailedData = await FetchDetailedUserInfo(userId); // Fetch detailed user info
         setDetailedInfo(detailedData.user);
         setEmail(detailedData.user.email || ''); // Set email for forms
       } catch (err) {
