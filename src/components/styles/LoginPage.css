@@ -1,7 +1,7 @@
 /* OTP Reminder Message */
 .otp-reminder {
     font-size: 14px; /* Slightly smaller text for supplementary message */
-    color: #777; /* Neutral color for non-intrusive text */
+    color: #ff0000; /* Neutral color for non-intrusive text */
     margin-top: 10px; /* Space between reminder and input field */
     line-height: 1.5; /* Improve readability */
   }
