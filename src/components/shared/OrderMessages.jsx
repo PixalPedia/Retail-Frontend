@@ -11,17 +11,25 @@ const OrderMessages = ({ orderId, senderId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [imageFile, setImageFile] = useState(null);
-  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, message: null });
+  const [contextMenu, setContextMenu] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    message: null,
+  });
   const [editingMessage, setEditingMessage] = useState(null);
   const [editText, setEditText] = useState('');
   const [editImage, setEditImage] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [isScrolling, setIsScrolling] = useState(false);
 
-  // Refs
+  // Refs for context menu, socket connection, long press, scroll timeout, and touch starting point.
   const contextRef = useRef(null);
   const socketRef = useRef(null);
   const touchTimeout = useRef(null);
+  const scrollTimeout = useRef(null);
+  const touchStartPosition = useRef({ x: 0, y: 0 });
 
   // 1. Fetch messages for the order and close context menu when clicking outside.
   useEffect(() => {
@@ -47,7 +55,7 @@ const OrderMessages = ({ orderId, senderId }) => {
 
     const handleClickOutside = (event) => {
       if (contextRef.current && !contextRef.current.contains(event.target)) {
-        setContextMenu((prev) => ({ ...prev, visible: false }));
+        setContextMenu(prev => ({ ...prev, visible: false }));
         setSelectedMessage(null);
       }
     };
@@ -57,7 +65,7 @@ const OrderMessages = ({ orderId, senderId }) => {
     };
   }, [orderId]);
 
-  // 2. Auto-scroll to the bottom when messages update AND manage auto-scroll based on user scroll.
+  // 2. Auto-scroll to the bottom when messages update and manage auto-scroll based on the user's scroll.
   useEffect(() => {
     const container = document.querySelector('.messages-container-order');
     if (container && autoScrollEnabled) {
@@ -72,16 +80,28 @@ const OrderMessages = ({ orderId, senderId }) => {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
       setAutoScrollEnabled(distanceFromBottom <= 50);
+
+      // Cancel any pending long press detection.
+      cancelLongPress();
+
+      // Mark as scrolling so long press won’t trigger.
+      if (!isScrolling) setIsScrolling(true);
+
+      // Reset long press ability only after 1.5 seconds of scroll inactivity.
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 1500);
     };
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [isScrolling]);
 
   // 3. Utility: Add a new message if it doesn’t already exist.
   const addMessage = (newMsgData) => {
     const newId = String(newMsgData.message_id || newMsgData.id);
-    setMessages((prev) => {
-      if (prev.some((msg) => String(msg.message_id || msg.id) === newId)) return prev;
+    setMessages(prev => {
+      if (prev.some(msg => String(msg.message_id || msg.id) === newId)) return prev;
       return [...prev, newMsgData];
     });
   };
@@ -98,9 +118,10 @@ const OrderMessages = ({ orderId, senderId }) => {
       }
       console.log('New message received:', messageData);
     });
+
     socketRef.current.on('messageEdited', (updatedMessage) => {
-      setMessages((prev) =>
-        prev.map((msg) => {
+      setMessages(prev =>
+        prev.map(msg => {
           const msgId = String(msg.message_id || msg.id);
           const updatedId = String(updatedMessage.message_id || updatedMessage.id);
           return msgId === updatedId ? updatedMessage : msg;
@@ -108,13 +129,17 @@ const OrderMessages = ({ orderId, senderId }) => {
       );
       console.log('Edited message received:', updatedMessage);
     });
+
     socketRef.current.on('messageDeleted', ({ messageId }) => {
-      setMessages((prev) => prev.filter((msg) => String(msg.message_id || msg.id) !== String(messageId)));
+      setMessages(prev =>
+        prev.filter(msg => String(msg.message_id || msg.id) !== String(messageId))
+      );
       console.log('Message delete event received:', messageId);
     });
+
     socketRef.current.on('messageRead', (updatedMessage) => {
-      setMessages((prev) =>
-        prev.map((msg) => {
+      setMessages(prev =>
+        prev.map(msg => {
           const msgId = String(msg.message_id || msg.id);
           const updatedId = String(updatedMessage.message_id || updatedMessage.id);
           return msgId === updatedId ? updatedMessage : msg;
@@ -122,6 +147,7 @@ const OrderMessages = ({ orderId, senderId }) => {
       );
       console.log('Read status update received:', updatedMessage);
     });
+
     return () => socketRef.current.disconnect();
   }, [orderId]);
 
@@ -136,15 +162,13 @@ const OrderMessages = ({ orderId, senderId }) => {
       const data = await response.json();
       if (response.ok) {
         const updated = data.updatedMessage[0];
-        setMessages((prev) =>
-          prev.map((msg) => {
+        setMessages(prev =>
+          prev.map(msg => {
             const id = String(msg.message_id || msg.id);
             if (id === String(messageId)) {
-              if (msg.messages) {
-                return { ...msg, messages: { ...msg.messages, read_status: updated.read_status } };
-              } else {
-                return { ...msg, read_status: updated.read_status };
-              }
+              return msg.messages
+                ? { ...msg, messages: { ...msg.messages, read_status: updated.read_status } }
+                : { ...msg, read_status: updated.read_status };
             }
             return msg;
           })
@@ -158,7 +182,7 @@ const OrderMessages = ({ orderId, senderId }) => {
   };
 
   useEffect(() => {
-    messages.forEach((msg) => {
+    messages.forEach(msg => {
       const id = String(msg.message_id || msg.id);
       const sender = msg.messages ? msg.messages.sender : msg.sender;
       const readStatus = msg.messages ? msg.messages.read_status : msg.read_status;
@@ -186,7 +210,6 @@ const OrderMessages = ({ orderId, senderId }) => {
       setImageFile(e.target.files[0]);
     }
   };
-
   const removeImagePreview = () => setImageFile(null);
 
   // 8. Send a new message.
@@ -215,12 +238,11 @@ const OrderMessages = ({ orderId, senderId }) => {
     }
   };
 
-  // 9. Context menu handler (for both right-click and long-press).
+  // 9. Context menu handler (for both right-click and long press).
   const handleContextMenu = (event, msg) => {
     event.preventDefault();
     const posX = event.pageX || (event.touches ? event.touches[0].pageX : 0);
     const posY = event.pageY || (event.touches ? event.touches[0].pageY : 0);
-    // Build normalized message data.
     const normalized = {
       message_id: msg.message_id || msg.id,
       sender: msg.messages ? msg.messages.sender : msg.sender,
@@ -233,17 +255,33 @@ const OrderMessages = ({ orderId, senderId }) => {
     setContextMenu({ visible: true, x: posX, y: posY, message: normalized });
   };
 
-  // 10. Long-press detection for mobile.
+  // 10. Improved long-press detection for mobile.
+  // Records the starting touch coordinate and fires the context menu if the touch remains nearly stationary.
   const startLongPress = (event, msg) => {
+    if (isScrolling) return; // Do not trigger long press during scroll.
+    const touch = event.touches ? event.touches[0] : null;
+    if (!touch) return;
+    touchStartPosition.current = { x: touch.pageX, y: touch.pageY };
     touchTimeout.current = setTimeout(() => {
-      const touch = event.touches ? event.touches[0] : { pageX: 0, pageY: 0 };
       const syntheticEvent = {
         pageX: touch.pageX,
         pageY: touch.pageY,
         preventDefault: () => {},
       };
       handleContextMenu(syntheticEvent, msg);
-    }, 600); // 600ms threshold
+    }, 600);
+  };
+
+  // Cancel long press when the touch moves too far.
+  const moveLongPress = (event) => {
+    if (!touchStartPosition.current.x && !touchStartPosition.current.y) return;
+    const touch = event.touches ? event.touches[0] : null;
+    if (!touch) return;
+    const dx = Math.abs(touch.pageX - touchStartPosition.current.x);
+    const dy = Math.abs(touch.pageY - touchStartPosition.current.y);
+    if (dx > 10 || dy > 10) {
+      cancelLongPress();
+    }
   };
 
   const cancelLongPress = () => {
@@ -259,7 +297,7 @@ const OrderMessages = ({ orderId, senderId }) => {
       contextMenu.message.message ||
       (contextMenu.message.messages && contextMenu.message.messages.message);
     setEditText(currentText);
-    setContextMenu((prev) => ({ ...prev, visible: false }));
+    setContextMenu(prev => ({ ...prev, visible: false }));
   };
 
   // 12. Save an edited message.
@@ -278,8 +316,8 @@ const OrderMessages = ({ orderId, senderId }) => {
       if (response.ok) {
         const updatedMsg = { message_id: data.updatedMessage.id, ...data.updatedMessage };
         updatedMsg.is_edited = true;
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages(prev =>
+          prev.map(msg =>
             String(msg.message_id || msg.id) === String(editingMessage.message_id || editingMessage.id)
               ? updatedMsg
               : msg
@@ -311,8 +349,8 @@ const OrderMessages = ({ orderId, senderId }) => {
       });
       const data = await response.json();
       if (response.ok) {
-        setMessages((prev) =>
-          prev.filter((msg) => String(msg.message_id || msg.id) !== String(messageId))
+        setMessages(prev =>
+          prev.filter(msg => String(msg.message_id || msg.id) !== String(messageId))
         );
         if (socketRef.current) {
           socketRef.current.emit('messageDeleted', { messageId });
@@ -323,7 +361,7 @@ const OrderMessages = ({ orderId, senderId }) => {
     } catch (error) {
       console.error('Error deleting message:', error);
     }
-    setContextMenu((prev) => ({ ...prev, visible: false }));
+    setContextMenu(prev => ({ ...prev, visible: false }));
     setSelectedMessage(null);
   };
 
@@ -339,12 +377,12 @@ const OrderMessages = ({ orderId, senderId }) => {
           text,
           url: window.location.href,
         })
-        .catch((err) => console.error('Error sharing:', err));
+        .catch(err => console.error('Error sharing:', err));
     } else {
       navigator.clipboard.writeText(text);
       alert('Message copied to clipboard');
     }
-    setContextMenu((prev) => ({ ...prev, visible: false }));
+    setContextMenu(prev => ({ ...prev, visible: false }));
     setSelectedMessage(null);
   };
 
@@ -357,9 +395,9 @@ const OrderMessages = ({ orderId, senderId }) => {
       navigator.clipboard
         .writeText(textToCopy)
         .then(() => console.log('Message copied to clipboard'))
-        .catch((err) => console.error('Failed to copy:', err));
+        .catch(err => console.error('Failed to copy:', err));
     }
-    setContextMenu((prev) => ({ ...prev, visible: false }));
+    setContextMenu(prev => ({ ...prev, visible: false }));
     setSelectedMessage(null);
   };
 
@@ -385,7 +423,7 @@ const OrderMessages = ({ orderId, senderId }) => {
         console.error('Download failed:', error);
       }
     }
-    setContextMenu((prev) => ({ ...prev, visible: false }));
+    setContextMenu(prev => ({ ...prev, visible: false }));
     setSelectedMessage(null);
   };
 
@@ -396,10 +434,10 @@ const OrderMessages = ({ orderId, senderId }) => {
       </div>
       {/* Apply a blur background when a message is selected */}
       <div className={`messages-container-order ${selectedMessage ? 'blur' : ''}`}>
-        {Object.keys(groupedMessages).map((date) => (
+        {Object.keys(groupedMessages).map(date => (
           <div key={date} style={{ margin: 0 }}>
             <div className="date-divider">{date}</div>
-            {groupedMessages[date].map((msg) => {
+            {groupedMessages[date].map(msg => {
               const actualSender = msg.messages ? msg.messages.sender : msg.sender;
               const messageContent = msg.messages ? msg.messages.message : msg.message;
               const imageUrl = msg.messages ? msg.messages.image_url : msg.image_url;
@@ -420,7 +458,7 @@ const OrderMessages = ({ orderId, senderId }) => {
                   className={`message-wrapper${String(actualSender) === String(senderId) ? ' sent' : ' received'}`}
                   onContextMenu={(e) => handleContextMenu(e, messageData)}
                   onTouchStart={(e) => startLongPress(e, messageData)}
-                  onTouchMove={cancelLongPress}
+                  onTouchMove={moveLongPress}
                   onTouchEnd={cancelLongPress}
                   onTouchCancel={cancelLongPress}
                 >
@@ -433,7 +471,7 @@ const OrderMessages = ({ orderId, senderId }) => {
                           className="message-image"
                           onContextMenu={(e) => handleContextMenu(e, messageData)}
                           onTouchStart={(e) => startLongPress(e, messageData)}
-                          onTouchMove={cancelLongPress}
+                          onTouchMove={moveLongPress}
                           onTouchEnd={cancelLongPress}
                           onTouchCancel={cancelLongPress}
                         />
