@@ -22,11 +22,16 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
   const [editImage, setEditImage] = useState(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  // For managing scrolling-related disabling of long press
+  const [isScrolling, setIsScrolling] = useState(false);
 
-  // Refs for context menu, socket connection, and long press timeout.
+  // Refs for managing context menu, socket connection, long press, scroll timeout and touch start coordinate
   const contextMenuRef = useRef(null);
   const socketRef = useRef(null);
   const touchTimeout = useRef(null);
+  const scrollTimeout = useRef(null);
+  const touchStartPosition = useRef({ x: 0, y: 0 });
+  const longPressTriggered = useRef(false);
 
   // 1. Fetch conversation messages when conversationId changes.
   useEffect(() => {
@@ -156,21 +161,32 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     }
   }, [messages, autoScrollEnabled]);
 
-  // 5a. Toggle auto-scroll based on user's scroll.
+  // 5a. Toggle auto-scroll based on user's scroll, and disable long press during scrolling.
   useEffect(() => {
     const container = document.querySelector('.md-messages-container');
     if (!container) return;
     const handleScroll = () => {
-      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
       if (distanceFromBottom > 50) {
         setAutoScrollEnabled(false);
       } else {
         setAutoScrollEnabled(true);
       }
+
+      // Cancel any ongoing long press detection.
+      cancelLongPress();
+      // Mark as scrolling to prevent touch long press being registered.
+      if (!isScrolling) setIsScrolling(true);
+      // Reset long press ability only after 1.5 seconds of scroll inactivity.
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 1500);
     };
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [isScrolling]);
 
   // 6. Group messages by creation date.
   const groupMessagesByDate = (msgs) => {
@@ -251,22 +267,50 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     });
   };
 
-  // Helper functions for long press detection on touch devices.
+  // 10. Improved long press detection for touch devices.
+  // Records the starting position and then triggers the context menu only if the touch remains within a small threshold.
   const startLongPress = (event, msg) => {
+    // Do not begin long press if the scroll is active.
+    if (isScrolling) return;
+    longPressTriggered.current = false;
+    const touch = event.touches[0];
+    touchStartPosition.current = { x: touch.clientX, y: touch.clientY };
     touchTimeout.current = setTimeout(() => {
-      const touch = event.touches ? event.touches[0] : { clientX: 0, clientY: 0 };
-      const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {} };
+      longPressTriggered.current = true;
+      const fakeEvent = {
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        preventDefault: () => {},
+      };
       handleMessageSelect(fakeEvent, msg);
-    }, 600); // 600ms threshold
+    }, 600); // 600ms threshold for long press
   };
 
+  // Cancel the long press if the touch moves too far from the starting position.
+  const moveLongPress = (event) => {
+    if (!touchStartPosition.current.x || !touchStartPosition.current.y) return;
+    const touch = event.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartPosition.current.x);
+    const dy = Math.abs(touch.clientY - touchStartPosition.current.y);
+    // If moved more than a threshold (e.g., 10px), cancel the pending long press.
+    if (dx > 10 || dy > 10) {
+      cancelLongPress();
+    }
+  };
+
+  // Cancel long press timeout.
   const cancelLongPress = () => {
     if (touchTimeout.current) {
       clearTimeout(touchTimeout.current);
     }
   };
 
-  // 10. Update read status for a message.
+  // Use the same function for touch end/cancel.
+  const endLongPress = () => {
+    cancelLongPress();
+  };
+
+  // 11. Update read status for a message.
   const updateReadStatus = async (messageId) => {
     try {
       const response = await wrapperFetch(`${BASE_URL}/messages/read`, {
@@ -296,7 +340,7 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     }
   };
 
-  // 11. Save an edited message.
+  // 12. Save an edited message.
   const handleSaveEdit = async () => {
     const formData = new FormData();
     formData.append('messageId', editingMessage.message_id || editingMessage.id);
@@ -336,7 +380,7 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     }
   };
 
-  // 12. Delete a message.
+  // 13. Delete a message.
   const handleDelete = async () => {
     const messageId = contextMenu.message.message_id || contextMenu.message.id;
     try {
@@ -347,9 +391,7 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
       });
       const data = await response.json();
       if (response.ok) {
-        setMessages((prev) =>
-          prev.filter((msg) => (msg.message_id || msg.id) !== messageId)
-        );
+        setMessages((prev) => prev.filter((msg) => (msg.message_id || msg.id) !== messageId));
         if (socketRef.current) {
           socketRef.current.emit('messageDeleted', { messageId });
         }
@@ -366,17 +408,15 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     setSelectedMessage(null);
   };
 
-  // 13. Share a message.
+  // 14. Share a message.
   const handleShare = () => {
     const text = contextMenu.message.message;
     if (navigator.share) {
-      navigator
-        .share({
-          title: 'Message',
-          text,
-          url: window.location.href,
-        })
-        .catch((err) => console.error('Error sharing:', err));
+      navigator.share({
+        title: 'Message',
+        text,
+        url: window.location.href,
+      }).catch((err) => console.error('Error sharing:', err));
     } else {
       navigator.clipboard.writeText(text);
       alert('Message copied to clipboard');
@@ -385,12 +425,11 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     setSelectedMessage(null);
   };
 
-  // 14. Copy a message.
+  // 15. Copy a message.
   const handleCopy = () => {
     const text = contextMenu.message.message;
     if (text) {
-      navigator.clipboard
-        .writeText(text)
+      navigator.clipboard.writeText(text)
         .then(() => console.log('Message copied to clipboard'))
         .catch((err) => console.error('Failed to copy:', err));
     }
@@ -398,7 +437,7 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
     setSelectedMessage(null);
   };
 
-  // 15. Download an image attachment.
+  // 16. Download an image attachment.
   const handleDownload = async () => {
     const imageUrl = contextMenu.message.image_url;
     if (imageUrl) {
@@ -435,9 +474,7 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
             <div className="md-date-divider">{date}</div>
             {groupedMessages[date].map((msg) => {
               const msgId = msg.message_id || msg.id;
-              const selectedId = selectedMessage
-                ? selectedMessage.message_id || selectedMessage.id
-                : null;
+              const selectedId = selectedMessage ? selectedMessage.message_id || selectedMessage.id : null;
               const isSelected = selectedId === msgId;
               const actualSender = msg.messages ? msg.messages.sender : msg.sender;
               const messageContent = msg.messages ? msg.messages.message : msg.message;
@@ -447,30 +484,26 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
               return (
                 <div
                   key={msgId}
-                  className={`md-message-wrapper ${
-                    actualSender === senderId ? 'md-sent' : 'md-received'
-                  }${isSelected && !contextMenu.visible ? ' selected' : ''}`}
+                  className={`md-message-wrapper${actualSender === senderId ? ' md-sent' : ' md-received'}${
+                    isSelected && !contextMenu.visible ? ' selected' : ''
+                  }`}
                   onContextMenu={(e) => handleMessageSelect(e, msg)}
                   onTouchStart={(e) => startLongPress(e, msg)}
-                  onTouchMove={cancelLongPress}
-                  onTouchEnd={cancelLongPress}
-                  onTouchCancel={cancelLongPress}
+                  onTouchMove={moveLongPress}
+                  onTouchEnd={endLongPress}
+                  onTouchCancel={endLongPress}
                 >
-                  <div
-                    className={`md-message-bubble ${
-                      actualSender === senderId ? 'md-sent' : 'md-received'
-                    }`}
-                  >
+                  <div className={`md-message-bubble${actualSender === senderId ? ' md-sent' : ' md-received'}`}>
                     {imageUrl && (
                       <img
                         src={imageUrl}
-                        alt="Message Attachment"
+                        alt="MessageAttachment"
                         className="md-message-image"
                         onContextMenu={(e) => handleMessageSelect(e, msg)}
                         onTouchStart={(e) => startLongPress(e, msg)}
-                        onTouchMove={cancelLongPress}
-                        onTouchEnd={cancelLongPress}
-                        onTouchCancel={cancelLongPress}
+                        onTouchMove={moveLongPress}
+                        onTouchEnd={endLongPress}
+                        onTouchCancel={endLongPress}
                       />
                     )}
                     <p className="md-message-text">{messageContent}</p>
@@ -503,18 +536,14 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
           className="md-input-field"
         />
         <input type="file" onChange={handleFileUpload} id="md-file-upload" style={{ display: 'none' }} />
-        <label htmlFor="md-file-upload" className="md-upload-label">
-          📎
-        </label>
+        <label htmlFor="md-file-upload" className="md-upload-label">📎</label>
         {imageFile && (
           <div className="md-image-preview">
             <img src={URL.createObjectURL(imageFile)} alt="Preview" />
             <button onClick={removeImagePreview}>×</button>
           </div>
         )}
-        <button onClick={handleSendMessage} className="md-send-button">
-          Send
-        </button>
+        <button onClick={handleSendMessage} className="md-send-button">Send</button>
       </div>
       <CSSTransition
         in={contextMenu.visible}
@@ -523,11 +552,7 @@ const MessageDone = ({ conversationId, senderId, messages, setMessages, onNotify
         unmountOnExit
         nodeRef={contextMenuRef}
       >
-        <div
-          className="md-context-menu"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          ref={contextMenuRef}
-        >
+        <div className="md-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} ref={contextMenuRef}>
           {contextMenu.message?.sender === senderId && (
             <>
               <button
