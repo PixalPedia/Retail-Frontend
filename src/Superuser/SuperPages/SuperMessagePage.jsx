@@ -111,7 +111,7 @@ const SuperUserMessagesPage = () => {
     const toggleExpand = async (e) => {
       e.stopPropagation(); // Prevent event bubbling to parent's onClick.
       if (!expanded && conv.user_id) {
-        const info = await wrapperFetchUserInfo(conv.user_id);
+        const info = await fetchUserInfo(conv.user_id);
         setUserInfo(info);
       }
       setExpanded(prev => !prev);

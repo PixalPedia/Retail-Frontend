@@ -59,7 +59,7 @@ const CategorySection = ({ BASE_URL, userId }) => {
       setCurrentCategory(randomCategory);
       setUsedCategoryIds((prev) => [...prev, randomCategory.id]);
 
-      await FetchCategoryProducts(randomCategory.id);
+      await fetchCategoryProducts(randomCategory.id);
 
       // Reset used categories after cycling through all
       if (usedCategoryIds.length + 1 === categories.length) {

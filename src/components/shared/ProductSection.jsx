@@ -20,7 +20,7 @@ const ProductsSection = ({ fetchProducts, title }) => {
 
     setLoading(true); // Set loading state
     try {
-      const response = await wrapperFetchProducts(page); // Fetch products for the current page
+      const response = await fetchProducts(page); // Fetch products for the current page
       if (response.products && response.products.length > 0) {
         setProducts((prevProducts) => [
           ...prevProducts,

@@ -35,7 +35,7 @@ const CartPlaceOrder = ({ cartItems, userId, onOrderSuccess }) => {
     const fetchInfo = async () => {
       if (orderType === 'delivery') {
         try {
-          const info = await wrapperFetchUserInfo(userId);
+          const info = await fetchUserInfo(userId);
           setUserInfo(info);
           showNotification('Delivery information fetched successfully.', 'success');
         } catch (error) {

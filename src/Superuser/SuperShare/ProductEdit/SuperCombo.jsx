@@ -65,9 +65,9 @@ const SuperCombo = ({ BASE_URL, productId, userId, product }) => {
       }
 
       // Re-fetch combos
-      await wrapperFetchCombos();
+      await fetchCombos();
       // Re-fetch all options to get updated names
-      await wrapperFetchAllOptions();
+      await fetchAllOptions();
 
       showNotification('Product, combos, and options refreshed successfully!', 'success');
     } catch (err) {
