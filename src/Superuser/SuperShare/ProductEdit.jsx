@@ -64,84 +64,109 @@ const ProductEdit = ({ BASE_URL }) => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Fetch initial product details
-  useEffect(() => {
-   wrapperFetch(`${BASE_URL}/api/products/fetch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.product) {
-          setProduct(data.product);
-          setBasicDetails({
-            title: data.product.title,
-            description: data.product.description,
-            price: data.product.price,
-            is_discounted: data.product.is_discounted,
-            discount_amount: data.product.discount_amount,
-            stock_quantity: data.product.stock_quantity,
-          });
-          if (data.product.images) {
-            // Set both previews and uploadedImages (as URLs)
-            setImagePreviews(data.product.images);
-            setUploadedImages(data.product.images);
-          }
-        } else {
-          showNotification('Failed to fetch product details', 'error');
+// Fetch initial product details
+useEffect(() => {
+  wrapperFetch(`${BASE_URL}/api/products/fetch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: productId }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.product) {
+        const fetchedProduct = data.product;
+        // Calculate initial price: if discounted, original price = final price + discount_amount.
+        const computedInitialPrice =
+          fetchedProduct.is_discounted && fetchedProduct.discount_amount
+            ? (parseFloat(fetchedProduct.price) +
+                parseFloat(fetchedProduct.discount_amount)).toFixed(2)
+            : fetchedProduct.price;
+  
+        setProduct(fetchedProduct);
+        setBasicDetails({
+          title: fetchedProduct.title,
+          description: fetchedProduct.description,
+          // Set the computed initial price to display in the form
+          price: computedInitialPrice,
+          is_discounted: fetchedProduct.is_discounted,
+          discount_amount: fetchedProduct.discount_amount,
+          stock_quantity: fetchedProduct.stock_quantity,
+        });
+  
+        if (fetchedProduct.images) {
+          // Set both previews and uploadedImages (as URLs)
+          setImagePreviews(fetchedProduct.images);
+          setUploadedImages(fetchedProduct.images);
         }
-      })
-      .catch((err) => {
-        console.error(err);
-        showNotification('Error fetching product details', 'error');
-      });
-  }, [BASE_URL, productId, showNotification]);
-
-  // --- Basic Details Handlers ---
-  const handleBasicSave = () => {
-    const updateData = {
-      user_id: userId,
-      product_id: productId,
-      title: basicDetails.title,
-      description: basicDetails.description,
-      price: parseFloat(basicDetails.price),
-      is_discounted: basicDetails.is_discounted,
-      discount_amount: basicDetails.is_discounted ? parseFloat(basicDetails.discount_amount) : 0,
-      stock_quantity: parseInt(basicDetails.stock_quantity, 10),
-    };
-
-   wrapperFetch(`${BASE_URL}/api/products/update`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
+      } else {
+        showNotification('Failed to fetch product details', 'error');
+      }
     })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.message) {
-          showNotification(data.message, 'success');
-          setBasicEditMode(false);
-        } else {
-          throw new Error('Failed to update basic details');
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        showNotification(err.message, 'error');
-      });
-  };
-
-  const handleBasicCancel = () => {
-    setBasicDetails({
-      title: product.title,
-      description: product.description,
-      price: product.price,
-      is_discounted: product.is_discounted,
-      discount_amount: product.discount_amount,
-      stock_quantity: product.stock_quantity,
+    .catch((err) => {
+      console.error(err);
+      showNotification('Error fetching product details', 'error');
     });
-    setBasicEditMode(false);
+}, [BASE_URL, productId, showNotification]);
+
+// --- Basic Details Handlers ---
+const handleBasicSave = () => {
+  // Parse the initial price from the input (user enters the original price directly)
+  const parsedInitialPrice = parseFloat(basicDetails.price);
+  // Parse the discount amount if applicable (but don't add it to the initial price)
+  const parsedDiscount = basicDetails.is_discounted
+    ? parseFloat(basicDetails.discount_amount)
+    : 0;
+
+  // Prepare the update payload – send only the initial_price, discount_amount, etc.
+  const updateData = {
+    user_id: userId,
+    product_id: productId,
+    title: basicDetails.title,
+    description: basicDetails.description,
+    // Send only the initial_price, exactly as entered by the user
+    initial_price: parsedInitialPrice,
+    is_discounted: basicDetails.is_discounted,
+    discount_amount: parsedDiscount,
+    stock_quantity: parseInt(basicDetails.stock_quantity, 10),
   };
+
+  wrapperFetch(`${BASE_URL}/api/products/update`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updateData),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.message) {
+        showNotification(data.message, 'success');
+        setBasicEditMode(false);
+      } else {
+        throw new Error('Failed to update basic details');
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      showNotification(err.message, 'error');
+    });
+};
+
+const handleBasicCancel = () => {
+  // Recalculate the initial price from fetched product data.
+  const computedInitialPrice =
+    product.is_discounted && product.discount_amount
+      ? (parseFloat(product.price) + parseFloat(product.discount_amount)).toFixed(2)
+      : product.price;
+  
+  setBasicDetails({
+    title: product.title,
+    description: product.description,
+    price: computedInitialPrice, // Use the computed initial price here
+    is_discounted: product.is_discounted,
+    discount_amount: product.discount_amount,
+    stock_quantity: product.stock_quantity,
+  });
+  setBasicEditMode(false);
+};
 
   // --- Image Handlers ---
   const handleImageUpload = (e) => {
